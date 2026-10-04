@@ -133,6 +133,20 @@ input:disabled { border-style: dashed; opacity: .8; }
 .dial output { flex: 1; text-align: center; border: 1px solid var(--dim); padding: 9px 0; }
 .dial button { width: 48px; }
 
+.wgrid { display: flex; flex-direction: column; gap: 6px; margin: 14px auto 4px; width: min(100%, 300px); }
+.wrow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.wcell {
+  aspect-ratio: 1; border: 1px solid var(--faint);
+  display: grid; place-items: center; font-size: 24px; font-weight: 600;
+}
+.wcell.filled { border-color: var(--dim); }
+.wcell.hit, .key.hit { background: var(--fg); color: var(--bg); text-shadow: none; border-color: var(--fg); }
+.wcell.near, .key.near { background: var(--warn); color: var(--bg); text-shadow: none; border-color: var(--warn); }
+.wcell.miss { color: var(--dim); text-shadow: none; border-color: var(--faint); }
+.key.miss { background: transparent; color: var(--faint); text-shadow: none; border-color: var(--faint); }
+.key.ru { flex: 0 0 calc((100% - 44px) / 12); font-family: inherit; font-size: 15px; }
+.key.wide { flex: 0 0 calc((100% - 44px) / 12 * 1.5); font-size: 11px; }
+
 .msg { margin-top: 10px; min-height: 1.45em; font-size: 13px; }
 
 .final { text-align: center; padding: 18px 0; }

@@ -26,7 +26,7 @@
       const s = JSON.parse(localStorage.getItem(STORE));
       if (s && Array.isArray(s.answers)) return s;
     } catch (_) {}
-    return { answers: [null, null, null, null], seq: [], fails: 0, booted: false };
+    return { answers: [null, null, null, null], seq: [], fails: 0, booted: false, auth: false, guesses: [] };
   }
   function save() {
     try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (_) {}
@@ -105,6 +105,12 @@
       await sleep(250);
       return state.answers[0] ? decoder() : inputScreen();
     }
+    if (!state.auth) {
+      await type("FBI-NET v2.6  (C) 1993", "dim");
+      await type("СВЯЗЬ С ЛАБОРАТОРИЕЙ ..... OK");
+      await type("");
+      return login();
+    }
     const lines = [
       ["FBI-NET v2.6  (C) 1993", "dim"],
       ["СВЯЗЬ С ЛАБОРАТОРИЕЙ ..... OK", ""],
@@ -121,6 +127,160 @@
     b.style.marginTop = "16px"; b.style.width = "100%";
     b.onclick = () => { state.booted = true; save(); inputScreen(); };
     screen.appendChild(b);
+  }
+
+  // ---------- авторизация: игра «5 букв» ----------
+  const RU_KEYBOARD = [
+    ["Й", "Ц", "У", "К", "Е", "Н", "Г", "Ш", "Щ", "З", "Х", "Ъ"],
+    ["Ф", "Ы", "В", "А", "П", "Р", "О", "Л", "Д", "Ж", "Э"],
+    ["⌫", "Я", "Ч", "С", "М", "И", "Т", "Ь", "Б", "Ю", "⏎"],
+  ];
+  const ATTEMPTS = 5;
+  const LOCKOUT_SEC = 30;
+  const PASSWORD = (() => {
+    const raw = Uint8Array.from(atob(D.auth), c => c.charCodeAt(0));
+    const pad = enc.encode("x0510");
+    return dec.decode(raw.map((b, i) => b ^ pad[i % pad.length]));
+  })();
+  const WORD = [...PASSWORD].length;
+
+  // Стандартная оценка Wordle: сначала точные совпадения, затем «есть в слове» с учётом числа повторов.
+  function score(guess) {
+    const g = [...guess], a = [...PASSWORD];
+    const res = Array(WORD).fill("miss");
+    const left = {};
+    a.forEach((ch, i) => { if (g[i] === ch) res[i] = "hit"; else left[ch] = (left[ch] || 0) + 1; });
+    g.forEach((ch, i) => { if (res[i] !== "hit" && left[ch]) { res[i] = "near"; left[ch]--; } });
+    return res;
+  }
+
+  function login() {
+    state.guesses = state.guesses || [];
+    let current = "";
+
+    const head = el("div");
+    head.appendChild(el("div", "line", "АВТОРИЗАЦИЯ"));
+    head.appendChild(el("div", "line dim", `ПАРОЛЬ: ${WORD} БУКВ · ПОПЫТОК: ${ATTEMPTS}`));
+    head.appendChild(el("div", "line dim", "РЕЖИМ: СТРОГИЙ ПРОТОКОЛ"));
+    screen.appendChild(head);
+
+    const grid = el("div", "wgrid");
+    screen.appendChild(grid);
+    const msg = el("div", "msg");
+    screen.appendChild(msg);
+
+    const kb = el("div", "kbd");
+    const keyEls = {};
+    RU_KEYBOARD.forEach(row => {
+      const r = el("div", "krow");
+      row.forEach(ch => {
+        const wide = ch === "⌫" || ch === "⏎";
+        const k = el("button", "key ru" + (wide ? " wide" : ""), ch === "⏎" ? "ВХОД" : ch);
+        k.onclick = () => press(ch);
+        keyEls[ch] = k;
+        r.appendChild(k);
+      });
+      kb.appendChild(r);
+    });
+    screen.appendChild(kb);
+
+    let locked = false;
+
+    function render() {
+      grid.innerHTML = "";
+      const marks = {};
+      for (let r = 0; r < ATTEMPTS; r++) {
+        const row = el("div", "wrow");
+        const guess = state.guesses[r];
+        const letters = guess ? [...guess] : r === state.guesses.length ? [...current] : [];
+        const sc = guess ? score(guess) : null;
+        for (let i = 0; i < WORD; i++) {
+          const cell = el("div", "wcell" + (letters[i] ? " filled" : "") + (sc ? " " + sc[i] : ""), letters[i] || "");
+          row.appendChild(cell);
+          if (sc) {
+            const prev = marks[letters[i]];
+            const rank = { miss: 0, near: 1, hit: 2 };
+            if (!prev || rank[sc[i]] > rank[prev]) marks[letters[i]] = sc[i];
+          }
+        }
+        grid.appendChild(row);
+      }
+      Object.entries(keyEls).forEach(([ch, k]) => { k.classList.remove("hit", "near", "miss"); if (marks[ch]) k.classList.add(marks[ch]); });
+    }
+
+    async function press(ch) {
+      if (locked) return;
+      if (ch === "⌫") { current = [...current].slice(0, -1).join(""); return render(); }
+      if (ch === "⏎") return submit();
+      if ([...current].length < WORD) { current += ch; buzz(5); render(); }
+    }
+
+    async function submit() {
+      if ([...current].length !== WORD) { msg.className = "msg err"; msg.textContent = `НУЖНО ${WORD} БУКВ.`; return; }
+      const guess = current.replace(/Ё/g, "Е");
+      const broken = protocolViolation(guess);
+      if (broken) { msg.className = "msg err"; msg.textContent = broken; buzz(120); return; }
+      current = "";
+      state.guesses.push(guess); save();
+      render();
+      msg.className = "msg"; msg.textContent = "";
+      if (guess === PASSWORD) {
+        buzz([30, 60, 30]);
+        state.auth = true; state.guesses = []; save();
+        msg.textContent = "ДОСТУП РАЗРЕШЁН.";
+        await sleep(900);
+        return boot();
+      }
+      if (state.guesses.length >= ATTEMPTS) return lockout();
+      buzz(60);
+      msg.className = "msg dim";
+      msg.textContent = `ОСТАЛОСЬ ПОПЫТОК: ${ATTEMPTS - state.guesses.length}`;
+    }
+
+    // Строгий режим Wordle: найденные буквы обязаны остаться в следующих попытках.
+    // Без него опытный игрок перебирает соседей шаблона одним словом-пробником.
+    function protocolViolation(guess) {
+      const g = [...guess];
+      for (const prev of state.guesses) {
+        const p = [...prev], sc = score(prev);
+        for (let i = 0; i < WORD; i++) {
+          if (sc[i] === "hit" && g[i] !== p[i]) return `ПРОТОКОЛ: ${i + 1}-Я БУКВА ДОЛЖНА БЫТЬ «${p[i]}».`;
+        }
+        const need = {};
+        p.forEach((ch, i) => { if (sc[i] !== "miss") need[ch] = (need[ch] || 0) + 1; });
+        for (const [ch, n] of Object.entries(need)) {
+          if (g.filter(x => x === ch).length < n) return `ПРОТОКОЛ: В ПАРОЛЕ ДОЛЖНА БЫТЬ «${ch}».`;
+        }
+      }
+      return null;
+    }
+
+    async function lockout() {
+      locked = true;
+      buzz(300);
+      await interference(700);
+      state.lockouts = (state.lockouts || 0) + 1; save();
+      for (let t = LOCKOUT_SEC; t > 0; t--) {
+        msg.className = "msg err";
+        msg.innerHTML = `ДОСТУП ЗАБЛОКИРОВАН. ПОВТОР ЧЕРЕЗ ${t} С` +
+          (state.lockouts >= 1 ? `<br><span class="warn">${D.authHint}</span>` : "");
+        await sleep(1000);
+      }
+      state.guesses = []; save();
+      locked = false;
+      msg.className = "msg warn"; msg.textContent = D.authHint;
+      render();
+    }
+
+    document.onkeydown = e => {
+      if (!screen.contains(grid)) { document.onkeydown = null; return; }
+      if (e.key === "Backspace") press("⌫");
+      else if (e.key === "Enter") press("⏎");
+      else if (/^[а-яё]$/i.test(e.key)) press(e.key.toUpperCase());
+    };
+
+    if (state.guesses.length >= ATTEMPTS) state.guesses = [];
+    render();
   }
 
   // ---------- ввод символов ----------
