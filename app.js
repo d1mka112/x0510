@@ -8,7 +8,8 @@
   // ---------- состояние ----------
   // Живёт в localStorage, чтобы квест переживал перезагрузку и закрытие вкладки.
   // done[id] хранит сам ответ модуля: без него не расшифровать сообщение после перезагрузки.
-  const fresh = () => ({ auth: false, guesses: [], lockouts: 0, done: {}, gates: {}, input: {}, fails: {}, tuned: {} });
+  // at: отметки времени (мс) — loginAt (первый показ входа), authAt (вход), [id модуля] (решён).
+  const fresh = () => ({ auth: false, guesses: [], lockouts: 0, done: {}, gates: {}, input: {}, fails: {}, tuned: {}, at: {} });
   let state = load();
   function load() {
     try {
@@ -42,6 +43,15 @@
     return e;
   };
   const buzz = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (_) {} };
+  const now = () => Date.now();
+  function fmt(ms) {
+    if (!(ms >= 0)) return "--:--";
+    const t = Math.round(ms / 1000), h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, sec = t % 60;
+    const p = n => String(n).padStart(2, "0");
+    return (h ? h + ":" + p(m) : p(m)) + ":" + p(sec);
+  }
+  let ticker = null;
+  const stopTicker = () => { clearInterval(ticker); ticker = null; };
   const shake = () => { screen.classList.add("shake"); setTimeout(() => screen.classList.remove("shake"), 400); };
 
   async function type(line, cls = "", speed = 14) {
@@ -135,6 +145,7 @@
   function view(title, back = true) {
     screen.innerHTML = "";
     keyHandler = null;
+    stopTicker();
     const head = el("div", "vhead");
     if (back) {
       const b = el("button", "back", "◂ ЛАБОРАТОРИЯ");
@@ -202,6 +213,7 @@
     let current = "";
     let locked = false;
     if (state.guesses.length >= ATTEMPTS) state.guesses = [];
+    if (!state.at.loginAt) { state.at.loginAt = now(); save(); }
 
     screen.appendChild(el("div", "line", "АВТОРИЗАЦИЯ"));
     screen.appendChild(el("div", "line dim", `ПАРОЛЬ: ${WORD} БУКВ · ПОПЫТОК: ${ATTEMPTS}`));
@@ -250,7 +262,7 @@
       msg.className = "msg"; msg.textContent = "";
       if (guess === PASSWORD) {
         buzz([30, 60, 30]);
-        state.auth = true; state.guesses = []; save();
+        state.auth = true; state.guesses = []; state.at.authAt = now(); save();
         msg.textContent = "ДОСТУП РАЗРЕШЁН.";
         await sleep(800);
         return welcome();
@@ -313,6 +325,13 @@
     screen.appendChild(bar);
     requestAnimationFrame(() => requestAnimationFrame(() => { bar.querySelector(".fill").style.width = pct + "%"; }));
 
+    const clockLine = el("div", "line dim small");
+    screen.appendChild(clockLine);
+    const end = solved === total ? state.at[MODS[total - 1].id] : null;
+    const tickLab = () => { clockLine.textContent = `ВРЕМЯ ОПЕРАЦИИ: ${fmt((end || now()) - state.at.authAt)}`; };
+    tickLab();
+    if (!end && state.at.authAt) ticker = setInterval(tickLab, 1000);
+
     const list = el("div", "mods");
     MODS.forEach((m, i) => {
       const open = isOpen(m, i), done = isDone(m);
@@ -335,7 +354,7 @@
       if (!isDone(m)) continue;
       any = true;
       const p = el("p", "jline");
-      p.innerHTML = `<span class="dim">${m.title}:</span> ${await decrypt(state.done[m.id], m.message)}`;
+      p.innerHTML = `<span class="dim">[${fmt(spent(m))}] ${m.title}:</span> ${await decrypt(state.done[m.id], m.message)}`;
       journal.appendChild(p);
     }
     if (!any) journal.appendChild(el("div", "dim", "ЗАПИСЕЙ НЕТ."));
@@ -344,13 +363,20 @@
     if (solved === total) await finale();
   }
 
+  // Время на модуль — от решения предыдущего (или от входа) до решения этого.
+  function spent(m) {
+    const i = MODS.indexOf(m);
+    const from = i === 0 ? state.at.authAt : state.at[MODS[i - 1].id];
+    return state.at[m.id] - from;
+  }
+
   function openModule(m) {
     if (m.gate && !state.gates[m.id]) return gate(m);
     ({ decoder, crossword, simon, receiver })[m.kind](m);
   }
 
   async function solve(m, answer, area) {
-    state.done[m.id] = answer; save();
+    state.done[m.id] = answer; state.at[m.id] = now(); save();
     buzz([30, 60, 30]);
     const text = await decrypt(answer, m.message);
     const box = el("div", "box reveal");
@@ -712,6 +738,15 @@
       <div class="big">КОНТАКТ УСТАНОВЛЕН</div>
       <div class="dim">ДЕЛО X-0510 · ПЕРЕДАНО СПЕЦ. АГЕНТУ Е. ЛЯДОВОЙ</div>`;
     screen.appendChild(f);
+
+    const a = state.at, last = a[MODS[MODS.length - 1].id];
+    const rows = [["ВХОД (5 БУКВ)", a.authAt - a.loginAt], ...MODS.map(m => [m.title, spent(m)])];
+    const report = el("div", "box");
+    report.appendChild(el("div", "title", "ОТЧЁТ О ВРЕМЕНИ"));
+    report.innerHTML += rows.map(([n, ms]) => `<div class="trow"><span>${n}</span><span>${fmt(ms)}</span></div>`).join("") +
+      `<div class="trow total"><span>ИТОГО ПОСЛЕ ВХОДА</span><span>${fmt(last - a.authAt)}</span></div>` +
+      `<div class="trow total"><span>ИТОГО С НАЧАЛА</span><span>${fmt(last - a.loginAt)}</span></div>`;
+    screen.appendChild(report);
   }
 
   // ---------- служебное ----------
