@@ -635,6 +635,49 @@
   }
 
   // ---------- приёмник: тумблеры + морзянка ----------
+  // Сигнал собирается в WAV и играется через <audio>: в отличие от Web Audio, медиаплеер на iPhone
+  // звучит и при включённом беззвучном режиме.
+  function morseWav(morse, unitMs = 120, repeats = 2) {
+    const rate = 22050, tone = 620;
+    const parts = [];
+    const silence = ms => parts.push([0, ms]);
+    silence(600);
+    for (let r = 0; r < repeats; r++) {
+      for (const ch of morse) {
+        if (ch === " ") { silence(unitMs * 5); continue; }
+        parts.push([1, ch === "." ? unitMs : unitMs * 3]);
+        silence(unitMs);
+      }
+      silence(unitMs * 14);
+    }
+    const total = parts.reduce((n, [, ms]) => n + Math.round(ms * rate / 1000), 0);
+    const pcm = new Int16Array(total);
+    let i = 0, phase = 0, crackle = 0;
+    for (const [on, ms] of parts) {
+      const n = Math.round(ms * rate / 1000), ramp = Math.min(110, n / 2);
+      for (let k = 0; k < n; k++, i++) {
+        const t = i / rate;
+        // эфирный шум с медленным «дыханием» и редкими щелчками
+        crackle = Math.random() < .0004 ? 1 : crackle * .9;
+        let v = (Math.random() * 2 - 1) * (.07 + .03 * Math.sin(t * 1.3)) + crackle * (Math.random() - .5) * .5;
+        if (on) {
+          const env = Math.min(1, k / ramp, (n - k) / ramp);
+          phase += 2 * Math.PI * (tone + 6 * Math.sin(t * 5)) / rate;
+          v += Math.sin(phase) * .55 * env;
+        }
+        pcm[i] = Math.max(-1, Math.min(1, v)) * 32767;
+      }
+    }
+    const buf = new ArrayBuffer(44 + pcm.length * 2), dv = new DataView(buf);
+    const str = (o, x) => [...x].forEach((c, j) => dv.setUint8(o + j, c.charCodeAt(0)));
+    str(0, "RIFF"); dv.setUint32(4, 36 + pcm.length * 2, true); str(8, "WAVE"); str(12, "fmt ");
+    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+    str(36, "data"); dv.setUint32(40, pcm.length * 2, true);
+    new Int16Array(buf, 44).set(pcm);
+    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  }
+
   const MORSE_TABLE = "А .- Б -... В .-- Г --. Д -.. Е . Ж ...- З --.. И .. Й .--- К -.- Л .-.. М -- Н -. О --- П .--. Р .-. С ... Т - У ..- Ф ..-. Х .... Ц -.-. Ч ---. Ш ---- Щ --.- Ъ --.-- Ы -.-- Ь -..- Э ..-.. Ю ..-- Я .-.-";
 
   function receiver(m) {
@@ -681,13 +724,16 @@
       const code = state.tuned[m.id];
       const morse = await decrypt(code, m.morse);
       area.appendChild(el("div", "line", `ЧАСТОТА ${code} МГц · СИГНАЛ ЗАХВАЧЕН`));
+      area.appendChild(el("div", "line warn small", "🔊 СИГНАЛ ЗВУКОВОЙ. ПРИБАВЬТЕ ГРОМКОСТЬ"));
       const lamp = el("div", "lamp");
       const play = el("button", "primary full", "[ ▶ ВОСПРОИЗВЕСТИ СИГНАЛ ]");
+      const player = new Audio(morseWav(morse));
+      player.preload = "auto";
       const manualBtn = el("button", "full", "[ ? ИНСТРУКЦИЯ ПО РАСШИФРОВКЕ ]");
       const manual = el("div", "box manual");
       manual.appendChild(el("div", "title", "ИНСТРУКЦИЯ"));
       manual.appendChild(el("div", "small", "Сигнал передан азбукой Морзе и повторяется дважды. " +
-        "Короткая вспышка — точка (·), длинная — тире (—). Пауза — конец буквы. Запишите знаки и сверьте с таблицей."));
+        "Короткий писк — точка (·), длинный — тире (—). Пауза — конец буквы. Запишите знаки и сверьте с таблицей."));
       const table = el("div", "mtable");
       MORSE_TABLE.split(" ").reduce((acc, x, i, arr) => (i % 2 ? acc : acc.concat([[x, arr[i + 1]]])), [])
         .forEach(([letter, code]) => table.appendChild(el("div", "", `<b>${letter}</b><span>${code.replace(/\./g, "·").replace(/-/g, "—")}</span>`)));
@@ -704,23 +750,15 @@
       area.append(field, kb, msg2);
       keyHandler = press;
 
-      const U = 120;
-      let playing = false;
-      play.onclick = async () => {
-        if (playing) return;
-        playing = true; play.disabled = true;
-        for (let rep = 0; rep < 2; rep++) {
-          for (const ch of morse) {
-            if (ch === " ") { await sleep(U * 5); continue; }
-            const len = ch === "." ? U : U * 3;
-            lamp.classList.add("on"); tone(600, len, .2); buzz(len);
-            await sleep(len);
-            lamp.classList.remove("on");
-            await sleep(U);
-          }
-          await sleep(U * 12);
-        }
-        playing = false; play.disabled = false;
+      // Лампа не повторяет точки и тире — только показывает, что идёт приём: сигнал читается на слух.
+      play.onclick = () => {
+        if (!player.paused) return;
+        player.currentTime = 0;
+        player.play().catch(() => {});
+        play.disabled = true; lamp.classList.add("live");
+      };
+      player.onended = () => {
+        play.disabled = false; lamp.classList.remove("live");
         // Инструкция появляется после первого прослушивания, чтобы сначала был сам сигнал, а потом ключ к нему.
         if (manualBtn.hidden) {
           state.heard = state.heard || {}; state.heard[m.id] = true; save();

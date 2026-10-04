@@ -181,6 +181,8 @@ button:disabled { opacity: .35; }
   width: 70px; height: 70px; border-radius: 50%; margin: 18px auto 6px;
   border: 2px solid var(--dim); background: radial-gradient(circle, #0b2414, #040a06);
 }
+.lamp.live { animation: rx 1.4s ease-in-out infinite; border-color: var(--fg); }
+@keyframes rx { 50% { box-shadow: 0 0 22px var(--dim); } }
 .lamp.on { background: radial-gradient(circle, #d8ffe6, var(--fg)); box-shadow: 0 0 40px var(--fg); border-color: var(--fg); }
 .wordfield { text-align: center; font-size: 24px; letter-spacing: .25em; border: 1px solid var(--dim); padding: 8px 0; margin-top: 6px; min-height: 48px; }
 
