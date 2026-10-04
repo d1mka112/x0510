@@ -73,6 +73,8 @@ main { flex: 1; }
 
 .slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .pattern { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.slots:has(.linear) { gap: 4px; }
+.pattern.linear { display: contents; }
 .cell {
   aspect-ratio: 1; border: 1px dashed var(--faint);
   display: grid; place-items: center;

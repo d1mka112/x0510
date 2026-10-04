@@ -444,9 +444,9 @@
     screen.appendChild(el("div", "line dim", "&gt; ВВЕДИТЕ СИМВОЛЫ ОБЪЕКТА"));
     const area = el("div");
     const box = el("div", "box");
-    box.appendChild(el("div", "title", `ОБЪЕКТ · ${m.patterns.length} УЗОРА`));
+    box.appendChild(el("div", "title", m.linear ? `ПЕРЕХВАТ · ${total} ЗНАКОВ` : `ОБЪЕКТ · ${m.patterns.length} УЗОРА`));
     const slots = el("div", "slots");
-    slots.style.gridTemplateColumns = `repeat(${m.patterns.length}, 1fr)`;
+    slots.style.gridTemplateColumns = m.linear ? `repeat(${m.patterns[0]}, 1fr)` : `repeat(${m.patterns.length}, 1fr)`;
     box.appendChild(slots);
     const counter = el("div", "line dim");
     const msg = el("div", "msg");
@@ -459,7 +459,7 @@
       slots.innerHTML = "";
       let k = 0;
       m.patterns.forEach(size => {
-        const p = el("div", "pattern");
+        const p = el("div", m.linear ? "pattern linear" : "pattern");
         for (let i = 0; i < size; i++, k++) {
           p.appendChild(el("div", "cell" + (seq[k] ? " filled" : "") + (k === seq.length ? " next" : ""), seq[k] || ""));
         }
@@ -787,9 +787,9 @@
   async function finale() {
     const f = el("div", "final reveal");
     f.innerHTML = `
-      <div class="warn">РАСШИФРОВКА ЗАВЕРШЕНА</div>
-      <div class="big">КОНТАКТ УСТАНОВЛЕН</div>
-      <div class="dim">ДЕЛО X-0510 · ПЕРЕДАНО СПЕЦ. АГЕНТУ Е. ЛЯДОВОЙ</div>`;
+      <div class="warn">СИГНАЛ ПОТЕРЯН</div>
+      <div class="big">ПОСЛЕДНИЙ ПЕЛЕНГ: ЧЕДЖУ</div>
+      <div class="dim">ДЕЛО X-0510 · ПЕРЕХОДИТ В ПОЛЕВУЮ ФАЗУ</div>`;
     screen.appendChild(f);
 
     const a = state.at, last = a[MODS[MODS.length - 1].id];
