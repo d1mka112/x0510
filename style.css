@@ -187,6 +187,12 @@ button:disabled { opacity: .35; }
 .trow { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; border-bottom: 1px dashed var(--faint); }
 .trow.total { font-weight: 600; border-bottom: 0; padding-top: 6px; }
 
+.manual { margin-top: 10px; }
+.mtable { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; margin-top: 10px; font-size: 13px; }
+.mtable div { display: flex; gap: 8px; }
+.mtable b { width: 14px; }
+.mtable span { letter-spacing: .1em; }
+
 .final { text-align: center; padding: 18px 0; }
 .final .big { font-size: 22px; font-weight: 600; letter-spacing: .08em; margin: 10px 0; }
 

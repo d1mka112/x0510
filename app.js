@@ -683,7 +683,19 @@
       area.appendChild(el("div", "line", `ЧАСТОТА ${code} МГц · СИГНАЛ ЗАХВАЧЕН`));
       const lamp = el("div", "lamp");
       const play = el("button", "primary full", "[ ▶ ВОСПРОИЗВЕСТИ СИГНАЛ ]");
-      area.append(lamp, play);
+      const manualBtn = el("button", "full", "[ ? ИНСТРУКЦИЯ ПО РАСШИФРОВКЕ ]");
+      const manual = el("div", "box manual");
+      manual.appendChild(el("div", "title", "ИНСТРУКЦИЯ"));
+      manual.appendChild(el("div", "small", "Сигнал передан азбукой Морзе и повторяется дважды. " +
+        "Короткая вспышка — точка (·), длинная — тире (—). Пауза — конец буквы. Запишите знаки и сверьте с таблицей."));
+      const table = el("div", "mtable");
+      MORSE_TABLE.split(" ").reduce((acc, x, i, arr) => (i % 2 ? acc : acc.concat([[x, arr[i + 1]]])), [])
+        .forEach(([letter, code]) => table.appendChild(el("div", "", `<b>${letter}</b><span>${code.replace(/\./g, "·").replace(/-/g, "—")}</span>`)));
+      manual.appendChild(table);
+      manual.hidden = true;
+      manualBtn.hidden = !state.heard?.[m.id];
+      manualBtn.onclick = () => { manual.hidden = !manual.hidden; };
+      area.append(lamp, play, manualBtn, manual);
       area.appendChild(el("div", "line dim small", "ВВЕДИТЕ РАСШИФРОВАННОЕ СЛОВО"));
       let value = "";
       const field = el("div", "wordfield");
@@ -709,6 +721,11 @@
           await sleep(U * 12);
         }
         playing = false; play.disabled = false;
+        // Инструкция появляется после первого прослушивания, чтобы сначала был сам сигнал, а потом ключ к нему.
+        if (manualBtn.hidden) {
+          state.heard = state.heard || {}; state.heard[m.id] = true; save();
+          manualBtn.hidden = false; manualBtn.classList.add("reveal");
+        }
       };
 
       function render() { field.textContent = value || "_"; }
@@ -722,9 +739,7 @@
         state.fails[m.id] = (state.fails[m.id] || 0) + 1; save();
         buzz(200); shake(); await interference(400);
         msg2.className = "msg err";
-        msg2.innerHTML = "СЛОВО НЕ СОВПАДАЕТ С СИГНАЛОМ." +
-          (state.fails[m.id] >= 2 ? `<br><span class="warn">${m.hints[0]}</span>` : "") +
-          (state.fails[m.id] >= 5 ? `<br><span class="warn small">${MORSE_TABLE}</span>` : "");
+        msg2.textContent = "СЛОВО НЕ СОВПАДАЕТ С СИГНАЛОМ.";
         value = ""; render();
       }
       render();
