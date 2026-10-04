@@ -122,7 +122,7 @@
       const r = el("div", "krow");
       row.forEach(ch => {
         const special = ch === "⌫" || ch === "⏎";
-        const k = el("button", "key" + (special ? " wide" : ""), ch === "⏎" ? ENTER_LABEL[layout] : ch);
+        const k = el("button", "key" + (special ? " wide" : "") + (ch === "⌫" ? " bksp" : ""), ch === "⏎" ? ENTER_LABEL[layout] : ch);
         k.onclick = () => { if (!special) buzz(5); onKey(ch); };
         keys[ch] = k;
         r.appendChild(k);

@@ -103,6 +103,8 @@ button:disabled { opacity: .35; }
 .kbd-digits .key { flex: 1; height: 52px; font-size: 20px; }
 .kbd-digits .key.wide { font-size: 13px; }
 
+.kbd .key.wide.bksp { font-family: inherit; font-size: 24px; line-height: 1; }
+
 .row { display: flex; gap: 8px; margin-top: 10px; }
 .row > * { flex: 1; }
 .primary { border-color: var(--fg); font-weight: 600; letter-spacing: .06em; }
